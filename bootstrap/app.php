@@ -76,6 +76,9 @@ $app->configure('filesystems');
 |
 */
 
+$app->middleware([
+    App\Http\Middleware\CorsMiddleware::class,
+]);
 
 $app->routeMiddleware([
     'auth' => App\Http\Middleware\JwtMiddleware::class,
