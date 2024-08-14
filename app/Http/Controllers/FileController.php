@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\File;
 use App\Models\Folder;
+use App\Models\Client;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use ZipArchive;
@@ -73,11 +74,17 @@ class FileController extends Controller
             return response()->json(['error' => 'Folder not found'], 404);
         }
 
+        // Obtém o nome do cliente
+        $clientName = Client::where('id', $id)->value('client_name');
+        if (!$clientName) {
+            return response()->json(['error' => 'Client not found'], 404);
+        }
+
         // Caminho absoluto onde os arquivos serão armazenados
         $baseDirectory = "C:/AdminFiles/uploads"; // Defina aqui o diretório no PC do admin
 
-        // Diretório específico para os arquivos do cliente
-        $directory = $baseDirectory . "/cliente-{$id}/{$folder->folder_name}/";
+        // Diretório específico para os arquivos do cliente e da pasta
+        $directory = $baseDirectory . "/cliente-{$clientName}/{$folder->folder_name}/";
 
         // Cria o diretório se não existir
         if (!is_dir($directory)) {
@@ -105,7 +112,7 @@ class FileController extends Controller
             }
 
             // Salva o arquivo no sistema de arquivos usando move_uploaded_file
-            if (!move_uploaded_file($file->getPathname(), $filePath)) {
+            if (!$file->move($directory, $fileName)) {
                 return response()->json(['error' => 'Failed to store file'], 500);
             }
 
@@ -124,6 +131,7 @@ class FileController extends Controller
 
         return response()->json(['message' => 'Files uploaded successfully'], 200);
     }
+
 
     public function downloadAllFiles($id, $folder_id, Request $request)
     {

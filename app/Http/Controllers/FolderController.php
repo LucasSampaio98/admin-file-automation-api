@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Folder;
+use App\Models\Client;
 use Illuminate\Http\Request;
 
 class FolderController extends Controller
@@ -26,9 +27,10 @@ class FolderController extends Controller
 
     public function createFolder(Request $request, $client_id)
     {
-        // Valida os dados da requisição
+        // Valida que o campo 'formats' é um array e que não está vazio
         $this->validate($request, [
-            'folder_name' => 'required|string|max:255',
+            'formats' => 'required|array|min:1',
+            'formats.*' => 'string|max:255', // Valida cada formato dentro do array
         ]);
 
         // Verifica se o usuário autenticado é o cliente ou um admin
@@ -38,10 +40,44 @@ class FolderController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        // Recebe o nome da pasta e define o diretório base
-        $folderName = $request->input('folder_name');
-        $baseDirectory = "C:/AdminFiles/uploads/cliente-{$client_id}/";
+        // Recupere o nome do cliente do banco de dados
+        $client = Client::findOrFail($client_id);
+        $clientName = $client->client_name; // Certifique-se de que 'name' é o campo correto
 
+        $baseDirectory = "C:/AdminFiles/uploads/cliente-{$clientName}/";
+        $createdFolders = [];
+
+        foreach ($request->input('formats') as $format) {
+            $folderName = "{$clientName}-{$format}";
+            $directory = $baseDirectory . $folderName . '/';
+
+            // Verifica se o diretório já existe e, se existir, incrementa o sufixo
+            $originalDirectory = $directory;
+            $counter = 1;
+            while (is_dir($directory)) {
+                $directory = $originalDirectory . " ({$counter})/";
+                $folderName = "{$clientName}-{$format} ({$counter})";
+                $counter++;
+            }
+
+            // Cria o diretório físico
+            mkdir($directory, 0755, true);
+
+            // Cria a nova pasta no banco de dados
+            $folder = Folder::create([
+                'client_id' => $client_id,
+                'folder_name' => $folderName
+            ]);
+
+            $createdFolders[] = $folder->id;
+        }
+
+        return response()->json(['message' => 'Folders created successfully', 'folder_ids' => $createdFolders], 201);
+    }
+
+
+    private function createDirectoryAndFolder($client_id, $folderName, $baseDirectory)
+    {
         // Inicializa o diretório onde a pasta será criada fisicamente
         $directory = $baseDirectory . $folderName . '/';
         $originalDirectory = $directory;
@@ -50,19 +86,17 @@ class FolderController extends Controller
         // Verifica se o diretório já existe e, se existir, incrementa o sufixo
         while (is_dir($directory)) {
             $directory = $originalDirectory . " ({$counter})/";
-            $folderName = $request->input('folder_name') . " ({$counter})";
+            $folderName = $folderName . " ({$counter})";
             $counter++;
         }
 
         // Cria o diretório físico
         mkdir($directory, 0755, true);
 
-        // Cria a nova pasta no banco de dados
-        $folder = Folder::create([
+        // Cria a nova pasta no banco de dados e retorna o objeto Folder criado
+        return Folder::create([
             'client_id' => $client_id,
             'folder_name' => $folderName
         ]);
-
-        return response()->json(['message' => 'Folder created successfully', 'folder' => $folder], 201);
     }
 }
