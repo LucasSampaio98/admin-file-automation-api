@@ -1,26 +1,137 @@
-# Lumen PHP Framework
+# To Do
 
-[![Build Status](https://travis-ci.org/laravel/lumen-framework.svg)](https://travis-ci.org/laravel/lumen-framework)
-[![Total Downloads](https://img.shields.io/packagist/dt/laravel/lumen-framework)](https://packagist.org/packages/laravel/lumen-framework)
-[![Latest Stable Version](https://img.shields.io/packagist/v/laravel/lumen-framework)](https://packagist.org/packages/laravel/lumen-framework)
-[![License](https://img.shields.io/packagist/l/laravel/lumen)](https://packagist.org/packages/laravel/lumen-framework)
+Implementar automação desktop para aplicação e vice-versa, não apenas dentro da aplicação
 
-Laravel Lumen is a stunningly fast PHP micro-framework for building web applications with expressive, elegant syntax. We believe development must be an enjoyable, creative experience to be truly fulfilling. Lumen attempts to take the pain out of development by easing common tasks used in the majority of web projects, such as routing, database abstraction, queueing, and caching.
+<?php
 
-> **Note:** In the years since releasing Lumen, PHP has made a variety of wonderful performance improvements. For this reason, along with the availability of [Laravel Octane](https://laravel.com/docs/octane), we no longer recommend that you begin new projects with Lumen. Instead, we recommend always beginning new projects with [Laravel](https://laravel.com).
+// Caminho da pasta local (ajuste para o seu sistema)
+$directory = '';
 
-## Official Documentation
+/** 
+ * Lista a estrutura de diretórios em árvore e exibe links de download
+ *
+ * @param string $dir Diretório inicial para listar
+ * @param int $indent Nível de indentação para formatação em árvore
+ */
+function listDirectoryTree($dir, $indent = 0)
+{
+    if (is_dir($dir)) {
+        $files = scandir($dir);
 
-Documentation for the framework can be found on the [Lumen website](https://lumen.laravel.com/docs).
+        // Exibe a pasta principal com link para baixar todos os arquivos, se tiver arquivos
+        echo str_repeat("&nbsp;&nbsp;", $indent) . "📁 " . basename($dir) . " (pasta)";
+        if (hasFilesInDirectory($files, $dir)) {
+            echo " - <a href='?download_all=" . urlencode($dir) . "'>Baixar todos os arquivos</a><br>";
+        } else {
+            echo "<br>";
+        }
 
-## Contributing
+        // Exibe cada arquivo ou subdiretório
+        foreach ($files as $file) {
+            if ($file !== "." && $file !== "..") {
+                $path = $dir . DIRECTORY_SEPARATOR . $file;
 
-Thank you for considering contributing to Lumen! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+                if (is_dir($path)) {
+                    echo str_repeat("&nbsp;&nbsp;", $indent + 1) . "📁 " . basename($file) . "<br>";
+                    listDirectoryTree($path, $indent + 2); // Chamada recursiva para subpastas
+                } else {
+                    echo str_repeat("&nbsp;&nbsp;", $indent + 1) . "📄 " . basename($file) .
+                        " - <a href='?download_file=" . urlencode($path) . "'>Baixar</a><br>";
+                }
+            }
+        }
+    } else {
+        echo "Erro: O diretório especificado não existe.<br>";
+    }
+}
 
-## Security Vulnerabilities
+/** 
+ * Verifica se um diretório contém arquivos
+ *
+ * @param array $files Lista de arquivos e pastas no diretório
+ * @param string $dir Caminho do diretório
+ * @return bool True se o diretório contiver arquivos, False caso contrário
+ */
+function hasFilesInDirectory($files, $dir)
+{
+    foreach ($files as $file) {
+        if ($file !== "." && $file !== ".." && is_file($dir . DIRECTORY_SEPARATOR . $file)) {
+            return true;
+        }
+    }
+    return false;
+}
 
-If you discover a security vulnerability within Lumen, please send an e-mail to Taylor Otwell at taylor@laravel.com. All security vulnerabilities will be promptly addressed.
+/** 
+ * Cria um arquivo ZIP com todos os arquivos de uma pasta e faz o download
+ *
+ * @param string $folderPath Caminho da pasta a ser compactada
+ */
+function downloadAllFilesInFolder($folderPath)
+{
+    $zip = new ZipArchive();
+    $zipFileName = tempnam(sys_get_temp_dir(), 'zip');
 
-## License
+    if ($zip->open($zipFileName, ZipArchive::CREATE) === TRUE) {
+        $files = scandir($folderPath);
+        foreach ($files as $file) {
+            $filePath = $folderPath . DIRECTORY_SEPARATOR . $file;
+            if (is_file($filePath)) {
+                $zip->addFile($filePath, $file);
+            }
+        }
+        $zip->close();
 
-The Lumen framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+        serveFileDownload($zipFileName, 'arquivos.zip', 'application/zip', true);
+    }
+}
+
+/** 
+ * Faz o download de um arquivo individual
+ *
+ * @param string $filePath Caminho completo do arquivo
+ */
+function downloadFile($filePath)
+{
+    if (file_exists($filePath)) {
+        serveFileDownload($filePath, basename($filePath), 'application/octet-stream');
+    } else {
+        echo "Erro: Arquivo não encontrado.<br>";
+    }
+}
+
+/** 
+ * Fornece um arquivo para download, com headers apropriados
+ *
+ * @param string $filePath Caminho completo do arquivo
+ * @param string $fileName Nome do arquivo para download
+ * @param string $contentType Tipo de conteúdo do arquivo
+ * @param bool $deleteAfterDownload Se true, exclui o arquivo após o download
+ */
+function serveFileDownload($filePath, $fileName, $contentType, $deleteAfterDownload = false)
+{
+    header('Content-Type: ' . $contentType);
+    header('Content-Disposition: attachment; filename="' . $fileName . '"');
+    header('Content-Length: ' . filesize($filePath));
+
+    // Força o buffer a ser limpo antes de ler o arquivo
+    ob_clean();
+    flush();
+    readfile($filePath);
+
+    // Exclui o arquivo temporário somente após a leitura completa
+    if ($deleteAfterDownload) {
+        unlink($filePath);
+    }
+    exit;
+}
+
+// Manipulação das solicitações de download
+if (isset($_GET['download_all'])) {
+    downloadAllFilesInFolder(urldecode($_GET['download_all']));
+} elseif (isset($_GET['download_file'])) {
+    downloadFile(urldecode($_GET['download_file']));
+} else {
+    // Exibe a estrutura de diretórios com links de download
+    listDirectoryTree($directory);
+}
